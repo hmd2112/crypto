@@ -175,6 +175,13 @@ def score_str(s):
             freq = d[char] / length * 100
             score += abs(freq - letter_frequency[char])
 
+    # Add points if we have non alpha characters
+    for char in d:
+        if char == ' ':
+            continue
+        if char not in letter_frequency:
+            score += d[char] / length * 100
+
     return score
 
 def hamming_distance(ba1, ba2):
@@ -208,7 +215,7 @@ def XOR(b1, b2):
     return bytes(xor_bytes)
 
 def pkcs_pad(b, pad):
-    num_to_add = pad - len(b)
+    num_to_add = pad - (len(b) % pad)
     if num_to_add < 0:
         return None
     b += bytes([num_to_add] * num_to_add)
