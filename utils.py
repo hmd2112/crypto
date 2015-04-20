@@ -1,3 +1,5 @@
+import random
+
 hex_CA = '0123456789abcdef'
 base64_CA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 base64_IA = [-1] * 256
@@ -220,3 +222,10 @@ def pkcs_pad(b, pad):
         return None
     b += bytes([num_to_add] * num_to_add)
     return b
+
+# Not cryptographically secure
+def generate_random(size):
+    key = b''
+    for i in range(0, size):
+        key += bytes([random.randint(0,255)])
+    return key

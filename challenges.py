@@ -163,17 +163,18 @@ def c12():
         b = b + b'A'
         new_size = len(misc.encryption_oracle_constantKey(b))
     block_size = new_size - base
+##    print ('block size: ' + str(block_size))
 
     #Detect if function is using EBC
     encrypted_contents = misc.encryption_oracle_constantKey(bytes(b'A'*base))
-##    if misc.block_repeats(block_size, encrypted_contents) == 0:
-##        print ('Using ECB')
+    if misc.block_repeats(block_size, encrypted_contents) == 0:
+        print ('Using CBC, exiting...')
+        return None
 ##    else:
-##        print ('Using CBC, exiting...')
-##        return None
+##        print ('Using ECB')
     
     #Crack one byte at a time
-    b = b'A' * (base * 2 + (base % block_size))
+    b = b'A' * base
     end = len(b) - block_size
     plain_text = b''
     encrypted_contents = misc.encryption_oracle_constantKey(b)
@@ -181,11 +182,128 @@ def c12():
         b = b[1:]
         d = dict()
         for byte in range(0, 256):
-            d[misc.encryption_oracle_constantKey(b + bytes([byte]))[end:end + block_size]] = byte
+            new_b = b + plain_text
+            d[misc.encryption_oracle_constantKey(new_b + bytes([byte]))[end:end + block_size]] = byte
         encrypted_contents = misc.encryption_oracle_constantKey(b)
-        plain_text += bytes([d[encrypted_contents[end:end + block_size]]])
+        try:
+            plain_text += bytes([d[encrypted_contents[end:end + block_size]]])
+        except:
+            #Key error means we hit padding bytes
+            break
+    print ('c12: PASS (' + str(plain_text) + ')')
+
+def c13():
+    key = utils.generate_random(16) # Attacker cannot see
+    e_p = misc.profile_for_attacker('1@123.com', key)
+    d_p = misc.decrypt_profile(e_p[16:32], key)
+##    print (d_p)
+    e_p = misc.profile_for_attacker('1@1234.comadmin', key)
+    admin_block = e_p[16:32]
+    d_p = misc.decrypt_profile(admin_block, key)
+##    print (d_p)
+    e_p = misc.profile_for_attacker('foo@bar12.com', key)
+    d_p = misc.decrypt_profile(e_p[:32] + admin_block, key)
+##    print (d_p)
+    print ('c13: PASS (' + str(d_p) + ')')
+
+def c14():
+    #Determine block size
+    # run function many times, create histogram of sizes, determine block size
+    block_size = 16
+##    print ('block size: ' + str(block_size))
+
+    #Detect if function is using EBC
+    encrypted_contents = misc.encryption_oracle_constantKey(bytes(b'A'*1024))
+    if misc.block_repeats(block_size, encrypted_contents) == 0:
+        print ('Using CBC, exiting...')
+        return None
+##    else:
+##        print ('Using ECB')
+
+    #Determine/create sentinal
+    sentinal = b''
+    while True:
+        b = misc.encryption_oracle_constantKey2(b'A'*1024 + b'B'*block_size + b'A'*block_size*2)
+        index = 0
+        d = dict()
+        while index < len(b):
+            if b[index:index+block_size] not in d:
+                d[b[index:index+block_size]] = 1
+            else:
+                d[b[index:index+block_size]] += 1
+            index += block_size
+        a_block = b''
+        b_block = b''
+        for key in d:
+            if d[key] > 20:
+                a_block = key
+                break
+        if a_block == b'':
+            continue
+        index = 0
+        prev_is_a_block = False
+        while index < len(b):
+            block = b[index:index+block_size]
+            index += block_size
+            if b_block != b'' and block == a_block and prev_is_a_block is False: #ensure it is aligned
+                break
+            else:
+                b_block = b''
+            if prev_is_a_block and block != a_block:
+                b_block = block
+                prev_is_a_block = False
+            if block == a_block:
+                prev_is_a_block = True
+        if b_block != b'':
+            sentinal = b_block
+            break
+##    print (sentinal)
+    print ()
+    
+    #Crack one byte at a time
+    b = b'A' * 1024
+    plain_text = b''
+    encrypted_contents = misc.encryption_oracle_constantKey2(sentinal + b)
+    end = len(b) - block_size
+    running = True
+    while running:  
+        b = b[1:]
+        d = dict()
+        new_b = b + plain_text
+        pad = 0
+        if len(plain_text) < block_size:
+            pad = block_size - len(plain_text)
+        dict_bytes = b''
+        for byte in range(0, 256):
+            dict_bytes += b'A'*pad + plain_text[-1 * (block_size - 1):] + bytes([byte])
+        aligned = False
+        byte = 0
+        while not aligned:
+            temp_b = misc.encryption_oracle_constantKey2(b'B'*block_size + dict_bytes)
+            i = 0
+            for i in range(0, len(temp_b), block_size):
+                if temp_b[i:i+block_size] == sentinal:
+                    aligned = True
+                    continue
+                if aligned:
+                    d[temp_b[i:i+block_size]] = byte
+                    byte += 1
+        aligned = False
+        while not aligned:
+            encrypted_contents = misc.encryption_oracle_constantKey(b'B'*block_size + new_b)
+            for i in range(0, len(encrypted_contents), block_size):
+                if temp_b[i:i+block_size] == sentinal:
+                    aligned = True
+                    continue
+                if aligned:
+                    try:
+                        plain_text = bytes(d[encrypted_contents[i+end:i+end+block_size]])
+                    except:
+                        #Key error means we hit padding bytes
+                        running = False
+                        break
         print (plain_text)
-    print ('c12: FAIL')
+    print ('c14: FAIL')
 
 def main():
 ##    c1()
@@ -199,7 +317,9 @@ def main():
 ##    c9()
 ##    c10()
 ##    c11()
-    c12()
+##    c12()
+##    c13()
+    c14()
 
 if __name__ == '__main__':
     main()
